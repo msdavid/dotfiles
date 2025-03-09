@@ -1,0 +1,5 @@
+#!/usr/bin/env nix-shell
+#! nix-shell -i bash
+#! nix-shell -p python312Packages.pycairo python312Packages.pygobject3 gobject-introspection gtk3 python312Packages.pysdl2 SDL2
+
+~/apps/cameractrls/.venv/bin/python ~/apps/cameractrls/cameractrlsgtk.py

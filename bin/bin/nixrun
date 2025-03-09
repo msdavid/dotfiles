@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#
+# nixrun - Run software via Nix without permanent installation
+#
+# Usage: nixrun <package_name> [arguments]
+
+set -e
+
+show_help() {
+    echo "Usage: nixrun <package_name> [arguments]"
+    echo
+    echo "Run a Nix package temporarily without installing it permanently."
+    echo
+    echo "Examples:"
+    echo "  nixrun gimp                # Run GIMP"
+    echo "  nixrun firefox             # Run Firefox"
+    echo "  nixrun python3 script.py   # Run a Python script"
+    echo
+}
+
+if [ $# -lt 1 ]; then
+    show_help
+    exit 1
+fi
+
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    show_help
+    exit 0
+fi
+
+PACKAGE_NAME="$1"
+shift
+
+if [ $# -eq 0 ]; then
+    # No arguments - assume binary name is the same as package name
+    BINARY_NAME="$PACKAGE_NAME"
+    
+    # Try to run the binary directly
+    nix-shell -p "$PACKAGE_NAME" --run "$BINARY_NAME" 2>/dev/null || nix-shell -p "$PACKAGE_NAME"
+else
+    # Arguments provided - try to use them as a command
+    nix-shell -p "$PACKAGE_NAME" --run "$*" 2>/dev/null || nix-shell -p "$PACKAGE_NAME"
+fi

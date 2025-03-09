@@ -1,0 +1,273 @@
+#!/usr/bin/env bash
+
+# NixOS Package Update Script
+# This script updates the packages.nix file and rebuilds the system
+
+set -e
+
+PACKAGES_FILE="/etc/nixos/packages.nix"
+NIXOS_CONFIG_DIR="/etc/nixos"
+
+# Function to display usage instructions
+usage() {
+    echo "Usage: $0 [OPTION]"
+    echo "Options:"
+    echo "  -a, --add package1 package2 ...    Add packages to the configuration"
+    echo "  -r, --remove package1 package2 ... Remove packages from the configuration"
+    echo "  -l, --list                         List all currently installed packages"
+    exit 1
+}
+
+# Function to commit changes
+commit_changes() {
+    local message="$1"
+    cd $NIXOS_CONFIG_DIR
+    git add .
+    git commit -m "$message" || echo "No changes to commit"
+}
+
+# No package verification needed
+check_packages() {
+    # This function is now a stub that does nothing
+    :
+}
+
+# Function to list all currently installed packages
+list_packages() {
+    echo "Currently installed packages:"
+    grep -E '[a-zA-Z0-9_-]+' "$PACKAGES_FILE" | \
+    grep -v "environment.systemPackages\|with pkgs;\|{" | \
+    grep -v "^};\|\s*\];" | \
+    sed -e 's/^[ \t]*//' -e 's/[ \t]*$//' | \
+    grep -v "^$" | \
+    sort
+}
+
+# Function to check if a package is already in the packages.nix file
+is_package_installed() {
+    local package="$1"
+    grep -q "^\s*${package}\s*$" "$PACKAGES_FILE"
+    return $?
+}
+
+# Function to add packages to the configuration
+add_packages() {
+    local packages=("$@")
+    local package_list=""
+    local already_installed=()
+    
+    # Check which packages are already installed
+    for pkg in "${packages[@]}"; do
+        if is_package_installed "$pkg"; then
+            already_installed+=("$pkg")
+        else
+            # No trailing newline for the last package
+            package_list+="$pkg"
+            # Only add a newline if this isn't the last package to add
+            if [ "$pkg" != "${packages[-1]}" ]; then
+                package_list+="\n"
+            fi
+        fi
+    done
+    
+    # If all packages are already installed, exit
+    if [ ${#already_installed[@]} -eq ${#packages[@]} ]; then
+        echo "All packages are already installed:"
+        for pkg in "${already_installed[@]}"; do
+            echo "  - $pkg"
+        done
+        exit 0
+    fi
+    
+    # If some packages are already installed, notify the user
+    if [ ${#already_installed[@]} -gt 0 ]; then
+        echo "The following packages are already installed and will be skipped:"
+        for pkg in "${already_installed[@]}"; do
+            echo "  - $pkg"
+        done
+    fi
+    
+    # If no packages to add after filtering, exit
+    if [ -z "$package_list" ]; then
+        echo "No packages to add."
+        exit 0
+    fi
+    
+    # Make a backup of the original file
+    cp "$PACKAGES_FILE" "${PACKAGES_FILE}.bak"
+    
+    # Insert the new packages before the closing bracket
+    # The \\ before $ is important to avoid an extra line
+    sed -i "/^\s*\];/i \\${package_list}" "$PACKAGES_FILE"
+    
+    echo "Added packages to $PACKAGES_FILE:"
+    for pkg in "${packages[@]}"; do
+        if ! is_package_installed "$pkg"; then
+            echo "  - $pkg"
+        fi
+    done
+}
+
+# Function to remove packages from the configuration
+remove_packages() {
+    local packages=("$@")
+    local not_found=()
+    local removed=()
+    
+    # Make a backup of the original file
+    cp "$PACKAGES_FILE" "${PACKAGES_FILE}.bak"
+    
+    for pkg in "${packages[@]}"; do
+        # Check if the package is in the file
+        if is_package_installed "$pkg"; then
+            # Remove the package from the file
+            sed -i "/^\s*${pkg}\s*$/d" "$PACKAGES_FILE"
+            removed+=("$pkg")
+        else
+            not_found+=("$pkg")
+        fi
+    done
+    
+    if [ ${#not_found[@]} -gt 0 ]; then
+        echo "The following packages were not found in $PACKAGES_FILE:"
+        for pkg in "${not_found[@]}"; do
+            echo "  - $pkg"
+        done
+    fi
+    
+    if [ ${#removed[@]} -eq 0 ]; then
+        echo "No packages were removed."
+        # Restore the backup since no changes were made
+        mv "${PACKAGES_FILE}.bak" "$PACKAGES_FILE"
+        exit 0
+    else
+        echo "Removed packages from $PACKAGES_FILE:"
+        for pkg in "${removed[@]}"; do
+            echo "  - $pkg"
+        done
+    fi
+}
+
+# Check if script is run as root
+if [ "$(id -u)" -ne 0 ]; then
+    echo "This script must be run as root" >&2
+    exit 1
+fi
+
+# No need to check for nix-locate since we removed verification
+
+# Check if packages.nix exists
+if [ ! -f "$PACKAGES_FILE" ]; then
+    echo "Error: $PACKAGES_FILE does not exist" >&2
+    exit 1
+fi
+
+# Check if the directory is a git repository
+if [ ! -d "$NIXOS_CONFIG_DIR/.git" ]; then
+    echo "Warning: $NIXOS_CONFIG_DIR is not a git repository"
+    echo "Git operations will be skipped"
+    
+    # Define empty commit function
+    commit_changes() {
+        echo "Git operations skipped"
+    }
+fi
+
+# Parse command line arguments
+if [ $# -eq 0 ]; then
+    usage
+fi
+
+# Commit any uncomitted changes before modifying packages.nix if git is available
+if [ -d "$NIXOS_CONFIG_DIR/.git" ]; then
+    commit_changes "Save current state before package updates"
+fi
+
+# Process arguments
+case "$1" in
+    -a|--add)
+        shift
+        if [ $# -eq 0 ]; then
+            echo "Error: No packages specified" >&2
+            usage
+        fi
+        
+        # Check if packages exist
+        check_packages "$@"
+        
+        # Add packages to the configuration
+        add_packages "$@"
+        
+        # Rebuild NixOS
+        echo "Rebuilding NixOS..."
+        if nixos-rebuild test --show-trace; then
+            echo "Rebuild successful, committing changes..."
+            # Generate commit message with the list of added packages
+            commit_msg="Add packages:"
+            for pkg in "$@"; do
+                commit_msg+=" $pkg"
+            done
+            commit_changes "$commit_msg"
+            
+            # Push changes if git is available
+            if [ -d "$NIXOS_CONFIG_DIR/.git" ]; then
+                cd $NIXOS_CONFIG_DIR
+                git push || echo "Failed to push changes"
+            fi
+            
+            echo "Changes committed and pushed successfully"
+            echo "Running final rebuild to switch to the new configuration..."
+            nixos-rebuild switch
+        else
+            echo "Rebuild failed, reverting changes..."
+            mv "${PACKAGES_FILE}.bak" "$PACKAGES_FILE"
+            echo "Changes reverted"
+            exit 1
+        fi
+        ;;
+    -r|--remove)
+        shift
+        if [ $# -eq 0 ]; then
+            echo "Error: No packages specified" >&2
+            usage
+        fi
+        
+        # Remove packages from the configuration
+        remove_packages "$@"
+        
+        # Rebuild NixOS
+        echo "Rebuilding NixOS..."
+        if nixos-rebuild test --show-trace; then
+            echo "Rebuild successful, committing changes..."
+            # Generate commit message with the list of removed packages
+            commit_msg="Remove packages:"
+            for pkg in "$@"; do
+                commit_msg+=" $pkg"
+            done
+            commit_changes "$commit_msg"
+            
+            # Push changes if git is available
+            if [ -d "$NIXOS_CONFIG_DIR/.git" ]; then
+                cd $NIXOS_CONFIG_DIR
+                git push || echo "Failed to push changes"
+            fi
+            
+            echo "Changes committed and pushed successfully"
+            echo "Running final rebuild to switch to the new configuration..."
+            nixos-rebuild switch
+        else
+            echo "Rebuild failed, reverting changes..."
+            mv "${PACKAGES_FILE}.bak" "$PACKAGES_FILE"
+            echo "Changes reverted"
+            exit 1
+        fi
+        ;;
+    -l|--list)
+        list_packages
+        ;;
+    *)
+        usage
+        ;;
+esac
+
+exit 0

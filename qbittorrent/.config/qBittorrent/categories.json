@@ -1,0 +1,14 @@
+{
+    "Documentaries": {
+        "save_path": "/stg/media/Documentaries"
+    },
+    "Kids": {
+        "save_path": "/stg/media/Kids"
+    },
+    "Movies": {
+        "save_path": "/stg/media/Movies"
+    },
+    "TV Shows": {
+        "save_path": "/stg/media/TV Shows"
+    }
+}
