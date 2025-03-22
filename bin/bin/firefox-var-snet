@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+GDK_DPI_SCALE=0.8 firefox -P "personal"

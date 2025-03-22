@@ -1,0 +1,2 @@
+ #!/usr/bin/env bash 
+~/apps/q/.venv/bin/python ~/apps/q/q.py $@
