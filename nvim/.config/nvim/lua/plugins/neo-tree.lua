@@ -3,14 +3,21 @@ return  {
   branch = "v3.x",
   dependencies = {
     "nvim-lua/plenary.nvim",
-    "nvim-tree/nvim-web-devicons", 
+    "nvim-tree/nvim-web-devicons",
     "MunifTanjim/nui.nvim",
   },
-  lazy = false, 
+  lazy = false,
   opts = {
-    -- fill any relevant options here
   },
   config = function()
-vim.keymap.set('n','<C-n>', ":Neotree filesystem reveal left<CR>")
-end 
+    require("neo-tree").setup({
+      close_if_last_window = true,
+      open_on_directory = true,
+      window = {
+        position = "right",
+        width = 40,
+      }
+    })
+    vim.keymap.set('n','<C-n>', ":Neotree filesystem reveal right<CR>")
+  end
 }

@@ -1,9 +1,0 @@
-{
-    "diagnostics.globals": [
-        "vim",
-        "config"
-    ],
-    "diagnostics.disable": [
-        "lowercase-global"
-    ]
-}

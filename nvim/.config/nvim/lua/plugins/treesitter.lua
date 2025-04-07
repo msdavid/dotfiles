@@ -4,9 +4,18 @@ return {
   config = function()
     local config = require("nvim-treesitter.configs")
     config.setup({
-    ensure_installed = {"lua", "python"},
-    highlight = {enable = true},
-    indent = {enable = true},
+      ensure_installed = {"lua", "python", "bash", "html", "javascript", "jinja", "dockerfile", "markdown"},
+      highlight = {enable = true},
+      indent = {enable = true},
+      incremental_selection = {
+        enable = true,
+        keymaps = {
+          init_selection = "<Enter>", 
+          node_incremental = "<Enter>",
+          scope_incremental = false,
+          node_decremental = "<Backspace>",
+        },
+      },
     })
   end
 }
